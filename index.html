@@ -14,7 +14,7 @@
 <body>
 
 <header class="app-header">
-  <img src="RR_logo.svg" class="logo">
+  <img src="logo-rrsoftware.svg" class="logo">
   <h1>Java Fejlesztői Teszt</h1>
 </header>
 
@@ -51,10 +51,15 @@ const TOTAL_TIME = 40 * 60;
 
 let QUESTION_POOL = null;
 let selectedQuestions = [];
-let answers = {};
 let timeLeft = TOTAL_TIME;
 let timerInterval = null;
+
 let EXPORT_DATA = null;
+
+/* tab váltás védelem */
+let examStarted = false;
+let tabSwitchCount = 0;
+let forcedFail = false;
 
 /* ================== DOM READY ================== */
 document.addEventListener("DOMContentLoaded", () => {
@@ -82,7 +87,7 @@ function loadQuestions(level) {
   s.onerror = () => {
     alert(
       "Nem sikerült betölteni a kérdésfájlt.\n" +
-      "Használj Live Server-t vagy npx serve-et!"
+      "Használj Live Server-t vagy GitHub Pages-t!"
     );
   };
 
@@ -104,6 +109,8 @@ function startQuiz() {
 
 /* ================== INIT EXAM ================== */
 function startExam() {
+  examStarted = true;
+
   selectedQuestions = [...window.QUESTION_POOL]
     .sort(() => 0.5 - Math.random())
     .slice(0, 30);
@@ -159,6 +166,7 @@ function startTimer() {
 /* ================== SUBMIT ================== */
 function submitQuiz() {
   clearInterval(timerInterval);
+  examStarted = false;
 
   let score = 0;
   let rows = [];
@@ -186,18 +194,51 @@ function submitQuiz() {
     level: document.getElementById("level").value,
     date: new Date().toISOString().slice(0, 10),
     score,
-    rows
+    rows,
+    forcedFail
   };
 
   document.getElementById("exam").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
 
-  document.getElementById("summary").textContent =
+  let text =
 `Név: ${EXPORT_DATA.name}
 Szint: ${EXPORT_DATA.level}
 Dátum: ${EXPORT_DATA.date}
 Eredmény: ${EXPORT_DATA.score} / 30`;
+
+  if (forcedFail) {
+    text += "\n\n⚠️ A teszt tabváltás miatt automatikusan lezárva.";
+  }
+
+  document.getElementById("summary").textContent = text;
 }
+
+/* ================== TAB SWITCH DETECTION ================== */
+document.addEventListener("visibilitychange", () => {
+  if (!examStarted || forcedFail) return;
+
+  if (document.hidden) {
+    tabSwitchCount++;
+
+    if (tabSwitchCount === 1) {
+      alert(
+        "Figyelem!\n" +
+        "A teszt elhagyása nem engedélyezett.\n" +
+        "Következő alkalommal a teszt automatikusan lezárul."
+      );
+    }
+
+    if (tabSwitchCount >= 2) {
+      forcedFail = true;
+      alert(
+        "A teszt megszakadt tabváltás miatt.\n" +
+        "Az eredmény automatikusan rögzítésre kerül."
+      );
+      submitQuiz();
+    }
+  }
+});
 
 /* ================== CSV EXPORT ================== */
 function exportCSV() {
@@ -227,23 +268,18 @@ function exportPDF() {
   pdf.text(`Eredmény: ${EXPORT_DATA.score} / 30`, 10, y); y += 10;
 
   EXPORT_DATA.rows.forEach((r, i) => {
-    if (y > 270) {
-      pdf.addPage();
-      y = 10;
-    }
+    if (y > 270) { pdf.addPage(); y = 10; }
 
-    pdf.text(`${i + 1}. ${r.question}`, 10, y);
-    y += 6;
-
-    pdf.text(`Válasz: ${r.user || "—"}`, 14, y);
-    y += 6;
-
-    pdf.text(`Helyes válasz: ${r.correct}`, 14, y);
-    y += 6;
-
-    pdf.text(`Eredmény: ${r.ok}`, 14, y);
-    y += 8;
+    pdf.text(`${i + 1}. ${r.question}`, 10, y); y += 6;
+    pdf.text(`Válasz: ${r.user || "—"}`, 14, y); y += 6;
+    pdf.text(`Helyes válasz: ${r.correct}`, 14, y); y += 6;
+    pdf.text(`Eredmény: ${r.ok}`, 14, y); y += 8;
   });
+
+  if (EXPORT_DATA.forcedFail) {
+    pdf.addPage();
+    pdf.text("⚠️ A teszt tabváltás miatt automatikusan lezárva.", 10, 20);
+  }
 
   pdf.save("java-teszt-reszletes-eredmeny.pdf");
 }
