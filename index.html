@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<title>Java Fejlesztői Teszt</title>
+
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <img src="RR_logo.svg" class="logo">
+  <h1>Java Fejlesztői Teszt</h1>
+</header>
+
+<div id="start">
+  <input id="candidateName" placeholder="Név">
+  <select id="level">
+    <option value="junior">Junior</option>
+    <option value="medior">Medior</option>
+    <option value="senior">Senior</option>
+  </select>
+  <button id="startBtn">Indítás</button>
+</div>
+
+<div id="exam" class="hidden">
+  <div id="timer">40:00</div>
+  <div class="progress-container">
+    <div id="timeProgress" class="progress-bar"></div>
+  </div>
+
+  <form id="quiz"></form>
+
+  <button id="submitBtn">Leadás</button>
+</div>
+
+<div id="result" class="hidden">
+  <pre id="summary"></pre>
+  <button onclick="exportPDF()">PDF export</button>
+  <button onclick="exportCSV()">CSV export</button>
+</div>
+
+<script>
+/* ================== GLOBALS ================== */
+const TOTAL_TIME = 40 * 60;
+
+let QUESTION_POOL = null;
+let selectedQuestions = [];
+let answers = {};
+let timeLeft = TOTAL_TIME;
+let timerInterval = null;
+let EXPORT_DATA = null;
+
+/* ================== DOM READY ================== */
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("startBtn").addEventListener("click", startQuiz);
+  document.getElementById("submitBtn").addEventListener("click", submitQuiz);
+});
+
+/* ================== LOAD QUESTIONS ================== */
+function loadQuestions(level) {
+  const old = document.getElementById("questionScript");
+  if (old) old.remove();
+
+  const s = document.createElement("script");
+  s.id = "questionScript";
+  s.src = "questions-" + level + ".js";
+
+  s.onload = () => {
+    if (!window.QUESTION_POOL || window.QUESTION_POOL.length === 0) {
+      alert("A kérdésfájl üres vagy hibás!");
+      return;
+    }
+    startExam();
+  };
+
+  s.onerror = () => {
+    alert(
+      "Nem sikerült betölteni a kérdésfájlt.\n" +
+      "Használj Live Server-t vagy npx serve-et!"
+    );
+  };
+
+  document.head.appendChild(s);
+}
+
+/* ================== START ================== */
+function startQuiz() {
+  const name = document.getElementById("candidateName").value.trim();
+  const level = document.getElementById("level").value;
+
+  if (!name) {
+    alert("Add meg a neved!");
+    return;
+  }
+
+  loadQuestions(level);
+}
+
+/* ================== INIT EXAM ================== */
+function startExam() {
+  selectedQuestions = [...window.QUESTION_POOL]
+    .sort(() => 0.5 - Math.random())
+    .slice(0, 30);
+
+  document.getElementById("start").classList.add("hidden");
+  document.getElementById("exam").classList.remove("hidden");
+
+  renderQuestions();
+  startTimer();
+}
+
+/* ================== RENDER ================== */
+function renderQuestions() {
+  const quiz = document.getElementById("quiz");
+  quiz.innerHTML = "";
+
+  selectedQuestions.forEach((q, i) => {
+    const div = document.createElement("div");
+    div.className = "question";
+
+    div.innerHTML =
+      `<p>${i + 1}. ${q.q}</p>` +
+      q.a.map((a, j) =>
+        `<label class="answer">
+          <input type="radio" name="q${i}" value="${j}">
+          ${a}
+        </label>`
+      ).join("");
+
+    quiz.appendChild(div);
+  });
+}
+
+/* ================== TIMER ================== */
+function startTimer() {
+  timerInterval = setInterval(() => {
+    timeLeft--;
+
+    document.getElementById("timer").textContent =
+      Math.floor(timeLeft / 60) + ":" +
+      String(timeLeft % 60).padStart(2, "0");
+
+    document.getElementById("timeProgress").style.width =
+      (timeLeft / TOTAL_TIME * 100) + "%";
+
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      submitQuiz();
+    }
+  }, 1000);
+}
+
+/* ================== SUBMIT ================== */
+function submitQuiz() {
+  clearInterval(timerInterval);
+
+  let score = 0;
+  let rows = [];
+
+  selectedQuestions.forEach((q, i) => {
+    const checked = document.querySelector(
+      `input[name="q${i}"]:checked`
+    );
+
+    const userAnswer = checked ? Number(checked.value) : null;
+    const correct = userAnswer === q.c;
+
+    if (correct) score++;
+
+    rows.push({
+      question: q.q,
+      user: userAnswer !== null ? q.a[userAnswer] : "",
+      correct: q.a[q.c],
+      ok: correct ? "IGEN" : "NEM"
+    });
+  });
+
+  EXPORT_DATA = {
+    name: document.getElementById("candidateName").value.trim(),
+    level: document.getElementById("level").value,
+    date: new Date().toISOString().slice(0, 10),
+    score,
+    rows
+  };
+
+  document.getElementById("exam").classList.add("hidden");
+  document.getElementById("result").classList.remove("hidden");
+
+  document.getElementById("summary").textContent =
+`Név: ${EXPORT_DATA.name}
+Szint: ${EXPORT_DATA.level}
+Dátum: ${EXPORT_DATA.date}
+Eredmény: ${EXPORT_DATA.score} / 30`;
+}
+
+/* ================== CSV EXPORT ================== */
+function exportCSV() {
+  let csv = "Kérdés,Válasz,Helyes válasz,Helyes?\n";
+
+  EXPORT_DATA.rows.forEach(r => {
+    csv += `"${r.question}","${r.user}","${r.correct}",${r.ok}\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "java-teszt-eredmeny.csv";
+  a.click();
+}
+
+/* ================== PDF EXPORT ================== */
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+  let y = 10;
+
+  pdf.text("Java Fejlesztői Teszt – Részletes eredmény", 10, y); y += 8;
+  pdf.text(`Név: ${EXPORT_DATA.name}`, 10, y); y += 6;
+  pdf.text(`Szint: ${EXPORT_DATA.level}`, 10, y); y += 6;
+  pdf.text(`Dátum: ${EXPORT_DATA.date}`, 10, y); y += 6;
+  pdf.text(`Eredmény: ${EXPORT_DATA.score} / 30`, 10, y); y += 10;
+
+  EXPORT_DATA.rows.forEach((r, i) => {
+    if (y > 270) {
+      pdf.addPage();
+      y = 10;
+    }
+
+    pdf.text(`${i + 1}. ${r.question}`, 10, y);
+    y += 6;
+
+    pdf.text(`Válasz: ${r.user || "—"}`, 14, y);
+    y += 6;
+
+    pdf.text(`Helyes válasz: ${r.correct}`, 14, y);
+    y += 6;
+
+    pdf.text(`Eredmény: ${r.ok}`, 14, y);
+    y += 8;
+  });
+
+  pdf.save("java-teszt-reszletes-eredmeny.pdf");
+}
+</script>
+
+</body>
+</html>

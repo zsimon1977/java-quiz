@@ -1,0 +1,8 @@
+body{font-family:Arial;background:#f3f7fa}
+.app-header{display:flex;gap:16px;justify-content:center;margin:20px}
+.logo{height:48px}
+.question{background:#fff;padding:16px;border-left:4px solid #0093DD;margin:16px;border-radius:6px}
+.answer{display:block;padding:6px}
+.hidden{display:none}
+.progress-container{height:8px;background:#ddd}
+.progress-bar{height:100%;background:#0093DD;width:100%}
