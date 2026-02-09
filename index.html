@@ -6,6 +6,7 @@
 
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="fonts/roboto-base64.js"></script>
 
 <style>
 .hidden { display: none; }
@@ -259,6 +260,12 @@ function exportCSV() {
 function exportPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
+  
+  // === Unicode font ===
+  pdf.addFileToVFS("Roboto-Regular.ttf", window.robotoFont);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.setFont("Roboto");
+  
   let y = 10;
 
   pdf.text("Java Fejlesztői Teszt – Részletes eredmény", 10, y); y += 8;
